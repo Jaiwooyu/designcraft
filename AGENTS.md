@@ -5,6 +5,7 @@ This repository is a Rust headless IDML-to-PNG/PDF renderer derived from DesignC
 
 - Preserve no-panic and clean-room behavior and respect asset attribution and licences. Input is hostile:
   bound allocations and recursion, use checked arithmetic, and report failures.
+- Retain licence, copyright, attribution and legal notices when removing obsolete files.
 - Keep the native renderer headless and preserve WASM compatibility of the retained libraries.
 - Fonts are optional external build inputs from `storytold/craft-fonts`; do not add font files to
   this repository. Existing bundled Latin fonts are retained and attributed in ASSETS.md.
