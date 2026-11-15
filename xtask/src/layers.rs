@@ -53,6 +53,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("testkit", Class::Testkit),
     // L7 apps and tooling
     ("designcraft", Class::Exempt),
+    ("idml-render", Class::Exempt),
     ("cli", Class::Exempt),
     ("web", Class::Exempt),
     ("xtask", Class::Exempt),
@@ -221,16 +222,6 @@ pub fn from_metadata(meta: &Value) -> Result<Vec<Crate>, String> {
     }
     out.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(out)
-}
-
-pub fn describe(class: Option<Class>) -> String {
-    match class {
-        Some(Class::Layer(l)) => format!("L{l}"),
-        Some(Class::Standalone) => "L0 standalone".into(),
-        Some(Class::Testkit) => "testkit".into(),
-        Some(Class::Exempt) => "exempt".into(),
-        None => "UNREGISTERED".into(),
-    }
 }
 
 #[cfg(test)]

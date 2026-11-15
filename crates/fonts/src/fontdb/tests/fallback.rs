@@ -23,6 +23,17 @@ fn family(db: &FontDb, c: char, language: Option<&str>) -> Option<String> {
     db.fallback_for(c, 0, language).map(|f| f.family.clone())
 }
 
+#[test]
+fn missing_korean_gothic_uses_one_korean_sans_face() {
+    let db = db_with(&[("Noto Sans CJK KR", &['한', 'A'])]);
+    let fonts = db.scoped(0);
+    assert!(!fonts.has_family("Example 고딕"));
+    let face = fonts.face("Example 고딕", "Regular");
+    assert_eq!(face.family, "Noto Sans CJK KR");
+    assert!(face.covers('한'));
+    assert!(face.covers('A'));
+}
+
 /// The families the Japanese chain finds, in order: the craft-fonts Japanese faces (none without
 /// craft-fonts), then `installed`, the stand-ins for system fonts (in chain order).
 fn japanese_chain_with(installed: &[&'static str]) -> Vec<&'static str> {

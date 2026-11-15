@@ -78,6 +78,9 @@ impl ScopedFonts<'_> {
             "arial" | "helvetica" => &["Liberation Sans", "Arial", "Helvetica"],
             "times new roman" | "times" => &["Liberation Serif", "Times New Roman", "Times"],
             "courier new" | "courier" => &["Liberation Mono", "Courier New", "Courier"],
+            // A Korean Gothic family needs one Korean face for the entire run. Falling back
+            // glyph by glyph from a Latin face mixes metrics and can make newspaper text overset.
+            _ if family.contains("고딕") => &["Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans CJK KR", "Noto Sans KR", "Source Han Sans K"],
             _ if lower.contains("arabic") || lower.contains("naskh") => &["Amiri", "Noto Naskh Arabic", "Geeza Pro"],
             _ if family.contains('楷') => &["Kaiti SC", "STKaiti", "KaiTi", "Songti SC"],
             _ if family.contains("仿宋") => &["STFangsong", "FangSong", "Songti SC"],
