@@ -1,0 +1,16 @@
+.git
+target
+target-*
+outputs
+corpus
+craft-fonts
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/*.egg-info
+.codex
+.agents
+.aws
+.env
+.env.*

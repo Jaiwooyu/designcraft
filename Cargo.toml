@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "apps/*", "xtask"]
+exclude = ["apps/render-api"]
 default-members = ["apps/idml-render"]
 
 [workspace.package]

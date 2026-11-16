@@ -3,6 +3,10 @@
 Current focus: a lightweight headless IDML-to-PNG/PDF renderer for an agent-assisted newspaper
 layout workflow. The source is derived from DesignCraft. See [known gaps](docs/gaps.md).
 
+- 2026-11-16: added a FastAPI HTTP wrapper with bounded uploads, packaged links/document fonts,
+  a persistent single-instance SQLite queue, renderer subprocess limits, cancellation, diagnostics
+  and result downloads. The native renderer and retained WASM-safe libraries are unchanged.
+
 - 2026-11-15: removed the unused desktop contributor data and obsolete review and test-runner settings.
 - 2026-11-15: replaced the desktop-focused workspace with the rendering application and its
   document, typography, image, IDML and PDF dependencies. Desktop, web, editing engine and

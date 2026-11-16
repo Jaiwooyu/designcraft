@@ -8,6 +8,11 @@ cargo build --release
 ./target/release/idml-render --in input.idml --png-dir output --pdf output/layout.pdf
 ```
 
+On Windows, see [the PowerShell setup and run instructions](docs/windows-setup.md).
+
+For HTTP uploads, queued render jobs and PNG/PDF downloads, see the
+[FastAPI wrapper guide](docs/render-api.md) in `apps/render-api`.
+
 Install an available Korean sans font on the server, for example Noto Sans CJK KR, to substitute
 missing fonts. Specify `--fallback-font 'Noto Sans CJK KR'` to select a family explicitly.
 Linked images should be beside the IDML or in its `Links` folder. The renderer warns about

@@ -1,5 +1,10 @@
 # Known gaps
 
+- The FastAPI wrapper is an initial single-instance service with a shared optional bearer token;
+  user accounts, tenant isolation, distributed workers and automatic result expiry are not implemented.
+  Output quotas are monitored rather than hard OS resource limits. Its Linux container and deployment
+  fidelity still require validation; see [the API guide](render-api.md).
+
 - Korean substitute fonts do not have the original fonts' metrics. The supplied newspaper example
   still reports 25 characters of overset text with Apple SD Gothic Neo; other substitutes can
   produce different line breaks and more overset.
