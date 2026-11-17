@@ -1,7 +1,8 @@
 # Headless IDML renderer
 
 `idml-render` is the default Cargo target. It loads an IDML package and writes PNG pages, a PDF,
- or both without starting the desktop application or the editing engine.
+ or both without starting the desktop application or the editing engine. `--analysis FILE.json`
+additionally writes [source-format observations](editorial-analysis.md), and can be used on its own.
 
 ```sh
 cargo build --release

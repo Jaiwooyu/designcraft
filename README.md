@@ -13,6 +13,16 @@ missing fonts. Specify `--fallback-font 'Noto Sans CJK KR'` to select a family e
 Linked images should be beside the IDML or in its `Links` folder. The renderer warns about
 missing links and overset text. Font substitution can change layout.
 
+Extract source-format observations and evidence as JSON, with optional rendered pages:
+
+```sh
+cargo run -p idml-render -- --in input.idml --analysis analysis.json --png-dir pages
+```
+
+The report keeps original formats separate from rendered measurements and marks format candidates
+as needing review. It does not call an AI service or infer editorial policies.
+See [editorial analysis](docs/editorial-analysis.md) for the schema, bounds and limitations.
+
 The renderer has been checked with one real newspaper IDML on macOS. An image missing from that
 package and 25 overset characters remain in that example. Linux server performance and fidelity
 have not yet been measured. For options and limitations see [the renderer guide](docs/idml-render.md)

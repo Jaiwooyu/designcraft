@@ -1397,9 +1397,12 @@ dependencies = [
  "designcraft-compose",
  "designcraft-doc",
  "designcraft-fonts",
+ "designcraft-geom",
  "designcraft-idml",
  "designcraft-pdf",
  "designcraft-render",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

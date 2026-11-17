@@ -2,6 +2,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 #![forbid(unsafe_code)]
 
+mod analysis;
 mod fonts;
 
 use std::io::Read;
@@ -9,12 +10,14 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 const MAX_FILE: u64 = 256 * 1024 * 1024;
-const USAGE: &str = "usage: idml-render --in FILE.idml [--png-dir DIR] [--pdf FILE.pdf] [--fallback-font FAMILY] [--scale PIXELS_PER_POINT]";
+const USAGE: &str =
+    "usage: idml-render --in FILE.idml [--png-dir DIR] [--pdf FILE.pdf] [--analysis FILE.json] [--fallback-font FAMILY] [--scale PIXELS_PER_POINT]";
 
 struct Options {
     input: PathBuf,
     png_dir: Option<PathBuf>,
     pdf: Option<PathBuf>,
+    analysis: Option<PathBuf>,
     fallback: Option<String>,
     scale: f64,
 }
@@ -23,6 +26,7 @@ fn options(args: impl IntoIterator<Item = String>) -> Result<Options, String> {
     let mut input = None;
     let mut png_dir = None;
     let mut pdf = None;
+    let mut analysis = None;
     let mut fallback = None;
     let mut scale = 1.0;
     let mut args = args.into_iter();
@@ -35,16 +39,17 @@ fn options(args: impl IntoIterator<Item = String>) -> Result<Options, String> {
             "--in" => input = Some(PathBuf::from(value)),
             "--png-dir" => png_dir = Some(PathBuf::from(value)),
             "--pdf" => pdf = Some(PathBuf::from(value)),
+            "--analysis" => analysis = Some(PathBuf::from(value)),
             "--fallback-font" => fallback = Some(value),
             "--scale" => scale = value.parse::<f64>().ok().filter(|v| v.is_finite() && *v > 0.0).ok_or("--scale must be positive and finite")?,
             _ => return Err(format!("unknown option {arg}\n{USAGE}")),
         }
     }
     let input = input.ok_or_else(|| format!("missing --in\n{USAGE}"))?;
-    if png_dir.is_none() && pdf.is_none() {
-        return Err(format!("choose --png-dir or --pdf\n{USAGE}"));
+    if png_dir.is_none() && pdf.is_none() && analysis.is_none() {
+        return Err(format!("choose --png-dir, --pdf or --analysis\n{USAGE}"));
     }
-    Ok(Options { input, png_dir, pdf, fallback, scale })
+    Ok(Options { input, png_dir, pdf, analysis, fallback, scale })
 }
 
 fn read_capped(path: &Path) -> Result<Vec<u8>, String> {
@@ -89,8 +94,15 @@ fn read_link(root: &Path, link: &str) -> Option<Vec<u8>> {
 
 fn run(opts: Options) -> Result<(), String> {
     let path = opts.input.canonicalize().map_err(|e| format!("{}: {e}", opts.input.display()))?;
-    if opts.pdf.as_ref().and_then(|p| p.canonicalize().ok()).is_some_and(|p| p == path) {
-        return Err("PDF output must not overwrite the input document".into());
+    for output in [&opts.pdf, &opts.analysis].into_iter().flatten() {
+        if output.canonicalize().ok().is_some_and(|p| p == path) {
+            return Err("output must not overwrite the input document".into());
+        }
+    }
+    if let (Some(pdf), Some(analysis)) = (&opts.pdf, &opts.analysis)
+        && output_path(pdf)? == output_path(analysis)?
+    {
+        return Err("PDF and analysis outputs must use different paths".into());
     }
     let root = path.parent().ok_or("input has no parent directory")?;
     let bytes = read_capped(&path)?;
@@ -103,10 +115,9 @@ fn run(opts: Options) -> Result<(), String> {
         data
     })
     .map_err(|e| e.to_string())?;
-    for link in missing.into_inner() {
-        eprintln!("warning: linked image not found: {link}");
-    }
-    for warning in imported.warnings {
+    let mut warnings = imported.warnings;
+    warnings.extend(missing.into_inner().into_iter().map(|link| format!("linked image not found: {link}")));
+    for warning in &warnings {
         eprintln!("warning: {warning}");
     }
     let mut doc = imported.document;
@@ -125,7 +136,10 @@ fn run(opts: Options) -> Result<(), String> {
     doc.font_scope = loaded.scope;
     for warning in loaded.skipped {
         eprintln!("warning: document fonts: {warning}");
+        warnings.push(format!("document fonts: {warning}"));
     }
+    // Capture original formats before replace_missing mutates styles and character runs.
+    let mut analysis = opts.analysis.as_ref().map(|_| analysis::extract(&doc, &imported.story_ids)).transpose()?;
     let fallback = opts.fallback.or_else(|| {
         let fonts = designcraft_fonts::FontDb::global().scoped(doc.font_scope);
         ["Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans CJK KR", "Noto Sans KR", "Source Han Sans K"]
@@ -133,14 +147,19 @@ fn run(opts: Options) -> Result<(), String> {
             .find(|family| fonts.has_family(family))
             .map(str::to_string)
     });
+    let mut substitutions = Vec::new();
     if let Some(family) = &fallback {
         for original in fonts::replace_missing(&mut doc, family)? {
             eprintln!("warning: replaced missing font {original} with {family}");
+            substitutions.push((original, family.clone()));
         }
     } else {
         eprintln!("warning: no Korean sans fallback is installed; missing fonts may render incorrectly");
     }
     let cache = designcraft_compose::Cache::new();
+    if let Some(report) = &mut analysis {
+        report.measure(&doc, &cache, &substitutions, warnings)?;
+    }
     for story in doc.stories.values() {
         let Some(frame) = story.frames.last() else { continue };
         if !doc.find(*frame).is_some_and(|location| matches!(location.spread, designcraft_doc::SpreadRef::Doc(_))) {
@@ -174,7 +193,22 @@ fn run(opts: Options) -> Result<(), String> {
             eprintln!("warning: {warning}");
         }
     }
+    if let (Some(path), Some(report)) = (opts.analysis, analysis) {
+        let bytes = report.to_json()?;
+        craft_atomic::atomic_write(&path, &bytes).map_err(|e| format!("{}: {e}", path.display()))?;
+        eprintln!("wrote {} ({} format candidates)", path.display(), report.candidates.len());
+    }
     Ok(())
+}
+
+/// Resolve existing aliases, or the parent of an output that has not been created yet.
+fn output_path(path: &Path) -> Result<PathBuf, String> {
+    if let Ok(path) = path.canonicalize() {
+        return Ok(path);
+    }
+    let parent = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or_else(|| Path::new("."));
+    let parent = parent.canonicalize().map_err(|e| format!("{}: {e}", parent.display()))?;
+    Ok(parent.join(path.file_name().ok_or("output has no file name")?))
 }
 
 fn main() -> ExitCode {

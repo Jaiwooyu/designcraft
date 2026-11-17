@@ -10,9 +10,12 @@ workspace = true
 
 [dependencies]
 designcraft-doc = { workspace = true }
+designcraft-geom = { workspace = true }
 designcraft-fonts = { workspace = true }
 designcraft-compose = { workspace = true }
 designcraft-idml = { workspace = true }
 designcraft-render = { workspace = true }
 designcraft-pdf = { workspace = true }
 craft-atomic = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

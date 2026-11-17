@@ -10,3 +10,11 @@
 - The retained shared CI workflow has not yet been verified on the new fork. Local checks run
   with `cargo xtask ci`.
 - Direct IDML article editing and a render–review–edit loop are not implemented.
+- Editorial analysis currently extracts single-document format observations, not AI-assigned
+  article roles, photo/caption relationships, cross-issue practices or user editing policies.
+  Candidates require review and have no assigned policy strength.
+- Analysis v1 excludes parent-page items, anchored objects, table-cell and note content. It
+  reports visible printable document-spread leaves and full source stories for their text frames;
+  group clipping and exact visible glyph bounds are not resolved. Resolved source formats include
+  importer defaults and do not expand nested/GREP/line styles or composition-time typography.
+  Font checks certify family availability only; rendered measurements are not reference-PDF evidence.
