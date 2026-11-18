@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 mod analysis;
+mod batch;
 mod fonts;
 
 use std::io::Read;
@@ -10,8 +11,21 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 const MAX_FILE: u64 = 256 * 1024 * 1024;
-const USAGE: &str =
-    "usage: idml-render --in FILE.idml [--png-dir DIR] [--pdf FILE.pdf] [--analysis FILE.json] [--fallback-font FAMILY] [--scale PIXELS_PER_POINT]";
+const USAGE: &str = "usage: idml-render --in FILE.idml [--png-dir DIR] [--pdf FILE.pdf] [--analysis FILE.json] [--fallback-font FAMILY] [--scale PIXELS_PER_POINT]\n       idml-render --in-dir DIR --analysis-dir DIR [--fallback-font FAMILY]";
+
+enum Job {
+    File(Options),
+    Batch(batch::Options),
+}
+
+impl Job {
+    fn run(self) -> Result<(), String> {
+        match self {
+            Self::File(opts) => run(opts),
+            Self::Batch(opts) => batch::run(opts),
+        }
+    }
+}
 
 struct Options {
     input: PathBuf,
@@ -22,13 +36,15 @@ struct Options {
     scale: f64,
 }
 
-fn options(args: impl IntoIterator<Item = String>) -> Result<Options, String> {
+fn options(args: impl IntoIterator<Item = String>) -> Result<Job, String> {
     let mut input = None;
+    let mut input_dir = None;
+    let mut analysis_dir = None;
     let mut png_dir = None;
     let mut pdf = None;
     let mut analysis = None;
     let mut fallback = None;
-    let mut scale = 1.0;
+    let mut scale = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         if arg == "--help" || arg == "-h" {
@@ -37,19 +53,31 @@ fn options(args: impl IntoIterator<Item = String>) -> Result<Options, String> {
         let value = args.next().filter(|v| !v.starts_with("--")).ok_or_else(|| format!("{arg}: missing value\n{USAGE}"))?;
         match arg.as_str() {
             "--in" => input = Some(PathBuf::from(value)),
+            "--in-dir" => input_dir = Some(PathBuf::from(value)),
+            "--analysis-dir" => analysis_dir = Some(PathBuf::from(value)),
             "--png-dir" => png_dir = Some(PathBuf::from(value)),
             "--pdf" => pdf = Some(PathBuf::from(value)),
             "--analysis" => analysis = Some(PathBuf::from(value)),
             "--fallback-font" => fallback = Some(value),
-            "--scale" => scale = value.parse::<f64>().ok().filter(|v| v.is_finite() && *v > 0.0).ok_or("--scale must be positive and finite")?,
+            "--scale" => scale = Some(value.parse::<f64>().ok().filter(|v| v.is_finite() && *v > 0.0).ok_or("--scale must be positive and finite")?),
             _ => return Err(format!("unknown option {arg}\n{USAGE}")),
         }
     }
-    let input = input.ok_or_else(|| format!("missing --in\n{USAGE}"))?;
+    if let Some(input_dir) = input_dir {
+        if input.is_some() || png_dir.is_some() || pdf.is_some() || analysis.is_some() || scale.is_some() {
+            return Err(format!("--in-dir cannot be combined with --in, --png-dir, --pdf, --analysis or --scale\n{USAGE}"));
+        }
+        let analysis_dir = analysis_dir.ok_or_else(|| format!("--in-dir requires --analysis-dir\n{USAGE}"))?;
+        return Ok(Job::Batch(batch::Options { input_dir, analysis_dir, fallback }));
+    }
+    if analysis_dir.is_some() {
+        return Err(format!("--analysis-dir requires --in-dir\n{USAGE}"));
+    }
+    let input = input.ok_or_else(|| format!("missing --in or --in-dir\n{USAGE}"))?;
     if png_dir.is_none() && pdf.is_none() && analysis.is_none() {
         return Err(format!("choose --png-dir, --pdf or --analysis\n{USAGE}"));
     }
-    Ok(Options { input, png_dir, pdf, analysis, fallback, scale })
+    Ok(Job::File(Options { input, png_dir, pdf, analysis, fallback, scale: scale.unwrap_or(1.0) }))
 }
 
 fn read_capped(path: &Path) -> Result<Vec<u8>, String> {
@@ -212,12 +240,17 @@ fn output_path(path: &Path) -> Result<PathBuf, String> {
 }
 
 fn main() -> ExitCode {
-    if std::env::args().skip(1).any(|arg| arg == "--help" || arg == "-h") {
-        use std::io::Write as _;
-        let _ = writeln!(std::io::stdout(), "{USAGE}");
-        return ExitCode::SUCCESS;
-    }
-    match std::panic::catch_unwind(|| options(std::env::args().skip(1)).and_then(run)) {
+    match std::panic::catch_unwind(|| {
+        let args = std::env::args_os()
+            .skip(1)
+            .map(|arg| arg.into_string().map_err(|_| "arguments must be valid Unicode".to_string()))
+            .collect::<Result<Vec<_>, _>>()?;
+        if args.iter().any(|arg| arg == "--help" || arg == "-h") {
+            use std::io::Write as _;
+            return writeln!(std::io::stdout(), "{USAGE}").map_err(|e| e.to_string());
+        }
+        options(args).and_then(Job::run)
+    }) {
         Ok(Ok(())) => ExitCode::SUCCESS,
         Ok(Err(error)) => {
             eprintln!("{error}");
@@ -239,6 +272,22 @@ mod tests {
         for value in ["0", "-1", "NaN", "inf"] {
             let args = ["--in", "in.idml", "--png-dir", "out", "--scale", value].map(str::to_string);
             assert!(options(args).is_err(), "{value}");
+        }
+    }
+
+    #[test]
+    fn batch_options_require_an_output_directory_and_reject_single_file_options() {
+        assert!(matches!(options(["--in-dir", "input", "--analysis-dir", "output"].map(str::to_string)), Ok(Job::Batch(_))));
+        for args in [
+            vec!["--in-dir", "input"],
+            vec!["--in", "input.idml", "--analysis-dir", "output"],
+            vec!["--in-dir", "input", "--analysis-dir", "output", "--in", "input.idml"],
+            vec!["--in-dir", "input", "--analysis-dir", "output", "--analysis", "file.json"],
+            vec!["--in-dir", "input", "--analysis-dir", "output", "--png-dir", "pages"],
+            vec!["--in-dir", "input", "--analysis-dir", "output", "--pdf", "file.pdf"],
+            vec!["--in-dir", "input", "--analysis-dir", "output", "--scale", "1"],
+        ] {
+            assert!(options(args.into_iter().map(str::to_string)).is_err());
         }
     }
 

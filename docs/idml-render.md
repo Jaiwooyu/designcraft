@@ -3,6 +3,8 @@
 `idml-render` is the default Cargo target. It loads an IDML package and writes PNG pages, a PDF,
  or both without starting the desktop application or the editing engine. `--analysis FILE.json`
 additionally writes [source-format observations](editorial-analysis.md), and can be used on its own.
+Use `--in-dir DIR --analysis-dir DIR` to analyze all IDML files directly in a folder and write
+one JSON report per file. See the [folder analysis guide](editorial-analysis.md#analyze-a-folder).
 
 ```sh
 cargo build --release

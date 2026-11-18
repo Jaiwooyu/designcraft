@@ -166,3 +166,57 @@ fn rejects_excessive_nesting_and_text() {
     spread.items.push(child);
     assert!(extract(&doc, &HashMap::new()).is_err());
 }
+
+#[test]
+fn layout_evidence_keeps_group_locks_and_wrap_without_inferring_permissions() {
+    let (mut doc, _, _) = fixture("Grouped body");
+    let spread = Arc::make_mut(&mut doc.spreads[0]);
+    let child = spread.items.pop().unwrap();
+    let mut group = Item::new(ItemId(90_001), child.layer, Shape::Group, Default::default());
+    group.locked = true;
+    group.wrap.mode = designcraft_doc::WrapMode::BoundingBox;
+    group.content = Content::Group { items: vec![child] };
+    spread.items.push(Arc::new(group));
+    let before = doc.clone();
+    let report = extract(&doc, &HashMap::new()).unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&report.to_json().unwrap()).unwrap();
+    let layout = &json["pages"][0]["elements"][0]["layout"];
+    assert_eq!(json["layout_evidence_version"], 1);
+    assert_eq!(layout["ancestor_locked"], true);
+    assert_eq!(layout["ancestor_wrap_present"], true);
+    assert_eq!(layout["item_locked"], false);
+    assert_eq!(layout["text_wrap"]["mode"], "none");
+    assert_eq!(doc, before);
+}
+
+#[test]
+fn layout_evidence_preserves_asset_crop_transform_and_rejects_nonfinite_wrap() {
+    use designcraft_doc::{Asset, AssetId, Fitting, Graphic};
+    let (mut doc, frame, _) = fixture("replace frame with graphic");
+    let asset = AssetId(42);
+    doc.assets.insert(asset, Arc::new(Asset { id: asset, name: "photo.jpg".into(), link: Some("old/Links/photo.jpg".into()), ..Default::default() }));
+    let item = doc.item_mut(frame).unwrap();
+    item.content = Content::Graphic(Graphic {
+        layer_options: None,
+        asset,
+        size: (640.0, 480.0),
+        xf: Affine::translate((-12.0, -7.0)),
+        clip: None,
+        auto_fit: Fitting::FillProportionally,
+        fit_align: 4,
+        crop: [1.0, 2.0, 3.0, 4.0],
+        wrap: Default::default(),
+        fill: Default::default(),
+    });
+    item.wrap.mode = designcraft_doc::WrapMode::BoundingBox;
+    item.wrap.offsets = [5.0; 4];
+    let json: serde_json::Value = serde_json::from_slice(&extract(&doc, &HashMap::new()).unwrap().to_json().unwrap()).unwrap();
+    let element = &json["pages"][0]["elements"][0];
+    assert_eq!(element["asset_available"], false);
+    assert_eq!(element["layout"]["graphic"]["source_link"], "old/Links/photo.jpg");
+    assert_eq!(element["layout"]["graphic"]["crop_amounts_pt"], serde_json::json!([1.0, 2.0, 3.0, 4.0]));
+    assert_eq!(element["layout"]["graphic"]["graphic_to_frame_transform"], serde_json::json!([1.0, 0.0, 0.0, 1.0, -12.0, -7.0]));
+    assert_eq!(element["layout"]["text_wrap"]["offsets_pt"], serde_json::json!([5.0, 5.0, 5.0, 5.0]));
+    doc.item_mut(frame).unwrap().wrap.offsets[0] = f64::NAN;
+    assert!(extract(&doc, &HashMap::new()).is_err());
+}

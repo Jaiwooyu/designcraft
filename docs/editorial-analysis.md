@@ -10,11 +10,41 @@ No network access or AI credentials are needed. The first implementation provide
 inputs for a later AI role/relationship classifier and an evidence-backed review interface.
 It does not identify headlines or infer newspaper-wide rules from a single layout.
 
+## Analyze a folder
+
+Windows CMD example, run from the repository root:
+
+```cmd
+cargo run --release -p idml-render -- --in-dir ".\corpus\idml" --analysis-dir ".\outputs\analyses"
+```
+
+This writes one report per input, for example `1면.idml` to `1면.json`.
+Replace `corpus/idml` with your flat IDML input folder, separate from the documentation.
+For issue folders containing packaged page subdirectories, use the
+[editorial library builder](editorial-library.md) instead.
+The output directory is created automatically. Only regular files directly in the selected folder are scanned;
+the `.idml` extension is case-insensitive. Subdirectories and file symlinks are skipped.
+Inputs are sorted by filename and processed sequentially in separate renderer processes,
+so document fonts and caches do not accumulate across files. `--fallback-font FAMILY` is
+forwarded to every document. Links and document fonts are resolved beside each source IDML.
+
+A failed document is reported and the remaining documents still run. The final summary
+prints success/failure counts, and any failure produces a nonzero exit code. Successful
+reports replace previous files atomically; a failed analysis leaves its previous report intact.
+An empty folder is an error. Batches are limited to 1,000 IDML files and 100,000 directory
+entries. Conflicting output names (including case-only stem differences) or outputs aliasing
+source documents/other outputs are rejected before analysis starts.
+
+Folder mode requires `--in-dir` and `--analysis-dir`; it cannot be combined with `--in`,
+`--analysis`, `--png-dir`, `--pdf` or `--scale`. Reports retain schema v1 and remain independent;
+folder analysis does not aggregate cross-document rules or infer editorial policies.
+
 ## Report
 
 | Field | Meaning |
 | --- | --- |
 | `schema_version`, `analyzer_version` | JSON schema and application version |
+| `layout_evidence_version` | Additive source-layout evidence version (`1` in new reports; absent in older schema-v1 reports) |
 | `pages` | Document pages in order; dimensions, margin/column settings and visible printable elements |
 | `pages[].elements` | Imported item ID, nearest group ID, page-local frame bounds, object style, story or graphic asset reference; role remains null |
 | `stories` | Original IDML story `Self` when available, imported story ID, ordered frame IDs, bounded text excerpt and resolved format spans |
@@ -22,6 +52,20 @@ It does not identify headlines or infer newspaper-wide rules from a single layou
 | `fonts` | Original family, family availability in the document font scope, and explicit replacement family if used |
 | `candidates` | Distinct used combinations of paragraph style, character style and the recorded source format, with evidence |
 | `warnings`, `limitations` | Import/link/font warnings and qualifications on the analysis |
+
+`pages[].elements[].layout` additionally records source item/layer/ancestor locks, layer ID,
+spread leaf traversal order (not a global visual or reading order), frame/graphic text-wrap settings,
+ignore-wrap state, live-caption source IDs when present, and graphic asset names/original links,
+natural size, placement transform, crop amounts, fitting and clipping-path presence.
+Crop amounts and wrap offsets are top/left/bottom/right points. Links are source metadata,
+not verified local paths, and imported lock values are not user editing permissions.
+Ancestor wrap presence is flagged, but its contour and offsets are not expanded onto each child.
+These additions do not alter rendering or the schema-v1 source-format fields.
+
+The [library pipeline](editorial-library.md#다섯-가지-구조-관찰) combines those observations with
+story threads, style hints and frame geometry to generate five structural categories. The native
+`--analysis` report records source facts; candidate grouping and geometric relationships are
+computed by the Python pipeline and stored in separate structure JSON files.
 
 Source formats are captured **before** missing-font replacement. They resolve paragraph-style
 inheritance, paragraph overrides, character-style inheritance and character overrides. The

@@ -9,3 +9,10 @@ plan/
 /.claude/
 /target-*/
 /craft-fonts/
+
+# Python local environments and generated caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/

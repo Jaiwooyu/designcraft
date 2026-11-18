@@ -90,3 +90,90 @@ fn analysis_preserves_source_fonts_and_does_not_change_rendering() {
     assert_eq!(std::fs::read(&input).unwrap(), original);
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn analyzes_folder_with_unicode_names_and_keeps_single_file_results() {
+    let root = std::env::temp_dir().join(format!("idml-batch-test-{}", std::process::id()));
+    let input = root.join("input");
+    let reports = root.join("new").join("reports");
+    std::fs::create_dir_all(input.join("nested")).unwrap();
+    let mut doc = Document::new(&Default::default());
+    let layer = doc.layers[0].id;
+    doc.add_text_frame(SpreadRef::Doc(0), Rect::new(50.0, 60.0, 300.0, 300.0), layer, "Batch fixture", ParaFormat::default()).unwrap();
+    let original = designcraft_idml::export_idml(&doc);
+    for name in ["1면.idml", "2면.IDML"] {
+        std::fs::write(input.join(name), &original).unwrap();
+    }
+    std::fs::write(input.join("readme.txt"), b"not an IDML file").unwrap();
+    std::fs::write(input.join("nested").join("ignored.idml"), b"invalid nested input").unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_idml-render"))
+        .arg("--in-dir")
+        .arg(&input)
+        .arg("--analysis-dir")
+        .arg(&reports)
+        .args(["--fallback-font", "Source Serif 4"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("2 succeeded, 0 failed, 2 total"));
+    assert_eq!(std::fs::read_dir(&reports).unwrap().count(), 2);
+    let baseline = root.join("single.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_idml-render"))
+        .arg("--in")
+        .arg(input.join("1면.idml"))
+        .arg("--analysis")
+        .arg(&baseline)
+        .args(["--fallback-font", "Source Serif 4"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    for (source, report) in [("1면.idml", "1면.json"), ("2면.IDML", "2면.json")] {
+        assert_eq!(std::fs::read(reports.join(report)).unwrap(), std::fs::read(&baseline).unwrap());
+        assert_eq!(std::fs::read(input.join(source)).unwrap(), original);
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn folder_analysis_continues_after_failure_and_preserves_existing_report() {
+    let root = std::env::temp_dir().join(format!("idml-batch-failure-test-{}", std::process::id()));
+    let input = root.join("input");
+    let reports = root.join("reports");
+    std::fs::create_dir_all(&input).unwrap();
+    std::fs::create_dir_all(&reports).unwrap();
+    std::fs::write(input.join("a-broken.idml"), b"not a ZIP").unwrap();
+    std::fs::write(reports.join("a-broken.json"), b"previous report").unwrap();
+    let original = designcraft_idml::export_idml(&Document::new(&Default::default()));
+    std::fs::write(input.join("z-valid.idml"), &original).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_idml-render")).arg("--in-dir").arg(&input).arg("--analysis-dir").arg(&reports).output().unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("a-broken.idml"), "{stderr}");
+    assert!(stderr.contains("1 succeeded, 1 failed, 2 total"), "{stderr}");
+    assert_eq!(std::fs::read(reports.join("a-broken.json")).unwrap(), b"previous report");
+    let report: serde_json::Value = serde_json::from_slice(&std::fs::read(reports.join("z-valid.json")).unwrap()).unwrap();
+    assert_eq!(report["schema_version"], 1);
+    assert_eq!(std::fs::read(input.join("z-valid.idml")).unwrap(), original);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn folder_analysis_rejects_empty_and_oversized_batches() {
+    let root = std::env::temp_dir().join(format!("idml-batch-limits-test-{}", std::process::id()));
+    let input = root.join("input");
+    let reports = root.join("reports");
+    std::fs::create_dir_all(&input).unwrap();
+    for expected in ["no IDML files found", "directory exceeds 1000 IDML files"] {
+        let output =
+            Command::new(env!("CARGO_BIN_EXE_idml-render")).arg("--in-dir").arg(&input).arg("--analysis-dir").arg(&reports).output().unwrap();
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains(expected), "{}", String::from_utf8_lossy(&output.stderr));
+        assert!(!reports.exists());
+        if expected == "no IDML files found" {
+            for index in 0..1_001 {
+                std::fs::write(input.join(format!("{index}.idml")), b"").unwrap();
+            }
+        }
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}

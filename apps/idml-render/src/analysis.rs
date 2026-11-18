@@ -8,6 +8,8 @@ use designcraft_doc::{Align, CharProps, Document, Item, ItemId, Leading, PageId,
 use designcraft_geom::{Affine, Rect};
 use serde::Serialize;
 
+mod layout;
+
 const MAX_PAGES: usize = 1_000;
 const MAX_ITEMS: usize = 50_000;
 const MAX_SPANS: usize = 50_000;
@@ -21,6 +23,7 @@ const MAX_WORK: usize = 2_000_000;
 #[derive(Serialize)]
 pub struct Analysis {
     schema_version: u32,
+    layout_evidence_version: u32,
     analyzer_version: &'static str,
     coordinate_system: &'static str,
     range_unit: &'static str,
@@ -58,6 +61,7 @@ struct Element {
     asset_available: Option<bool>,
     role: Option<&'static str>,
     rendered: Option<FrameMeasurement>,
+    layout: layout::LayoutEvidence,
 }
 
 #[derive(Clone, Serialize)]
@@ -193,9 +197,9 @@ fn elements(doc: &Document, roots: &[std::sync::Arc<Item>], visited: &mut usize)
     if roots.len() > MAX_ITEMS {
         return Err("analysis: too many top-level items".into());
     }
-    let mut pending: Vec<_> = roots.iter().rev().map(|it| (&**it, Affine::IDENTITY, None, 0usize)).collect();
+    let mut pending: Vec<_> = roots.iter().rev().map(|it| (&**it, Affine::IDENTITY, None, 0usize, false, false)).collect();
     let mut out = Vec::new();
-    while let Some((item, parent, group_id, depth)) = pending.pop() {
+    while let Some((item, parent, group_id, depth, ancestor_locked, ancestor_wrap)) = pending.pop() {
         *visited += 1;
         if *visited > MAX_ITEMS || depth >= 64 {
             return Err("analysis: item count or nesting limit exceeded".into());
@@ -205,12 +209,20 @@ fn elements(doc: &Document, roots: &[std::sync::Arc<Item>], visited: &mut usize)
         }
         let xf = parent * item.xf;
         finite(&xf.as_coeffs())?;
+        finite(&item.wrap.offsets)?;
         if item.is_group() {
             if pending.len().saturating_add(item.children().len()) > MAX_ITEMS {
                 return Err("analysis: too many nested items".into());
             }
             for child in item.shown_children().collect::<Vec<_>>().into_iter().rev() {
-                pending.push((child, xf, Some(item.id), depth + 1));
+                pending.push((
+                    child,
+                    xf,
+                    Some(item.id),
+                    depth + 1,
+                    ancestor_locked || item.locked || doc.layer(item.layer).is_some_and(|layer| layer.locked),
+                    ancestor_wrap || item.wrap.mode != designcraft_doc::WrapMode::None,
+                ));
             }
             continue;
         }
@@ -242,6 +254,7 @@ fn elements(doc: &Document, roots: &[std::sync::Arc<Item>], visited: &mut usize)
             asset_available: graphic.map(|g| doc.assets.get(&g.asset).is_some_and(|a| !a.data.is_empty())),
             role: None,
             rendered: None,
+            layout: layout::observe(doc, item, ancestor_locked, ancestor_wrap, out.len())?,
         });
     }
     Ok(out)
@@ -458,6 +471,7 @@ pub fn extract(doc: &Document, story_ids: &HashMap<String, StoryId>) -> Result<A
     let candidates = format_candidates(&stories)?;
     Ok(Analysis {
         schema_version: 1,
+        layout_evidence_version: 1,
         analyzer_version: env!("CARGO_PKG_VERSION"),
         coordinate_system: "page-local points; top-left origin; axis-aligned frame bounds; excludes bleed",
         range_unit: "UTF-8 byte offsets into the original story, not the excerpt",
@@ -471,6 +485,7 @@ pub fn extract(doc: &Document, story_ids: &HashMap<String, StoryId>) -> Result<A
             "Font availability is checked by family; exact faces and glyph coverage are not certified.",
             "Candidate counts are formatted spans, not independent issues, pages or policy confidence.",
             "IDs are local to this import; evidence links through story/frame IDs to page element bounds.",
+            "Layout evidence records source locks/wrap settings and AABB geometry, not editing permissions or confirmed collisions; ancestor wrap contours are not expanded.",
         ],
         warnings: Vec::new(),
         pages,
