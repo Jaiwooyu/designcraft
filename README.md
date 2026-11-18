@@ -1,15 +1,19 @@
-# IDML 렌더러와 신문 편집 참고 자료 생성기
+# IDML 분석·편집 CLI와 신문 편집 참고 자료 생성기
 
 InDesign에서 내보낸 IDML을 읽어 지면을 PNG·PDF로 렌더링하고, 서식과 배치를 분석하는 프로젝트입니다.
 DesignCraft의 IDML 가져오기·조판·렌더링 라이브러리를 사용하는 Rust 프로그램과 Python 스크립트로 구성됩니다.
 실행에 InDesign, 그래픽 창, GPU가 필요하지 않습니다.
+`idml-render`는 렌더링·분석을, `designcraft-cli`는 명령과 스크립트를 통한 문서 편집을 담당합니다.
+CLI 소스는 `cli/`, 공용 라이브러리는 `crates/`에 있으며 루트 Cargo 워크스페이스와 잠금 파일을 함께 사용합니다.
 
 여러 호의 신문을 분석하면 면별 프로필, 유사 지면, 반복 서식 후보와
 **편집 AI에 참고 자료로 전달할 `editing_context.md` 한 파일**까지 생성합니다.
 기사 묶음 후보, 원본 본문 연결 순서, 사진·캡션 후보, 겹침·감싸기 관찰, 누락·넘침 상태도 함께 기록합니다.
 
-현재 구현 범위는 **렌더링·분석·참고 자료 생성**입니다. LLM 호출, 기사 교체, IDML 수정,
-사진·캡션·기사 관계 확정, 편집 후 자동 검증까지 수행하는 편집 엔진은 아직 없습니다.
+`designcraft-cli`로 IDML을 읽고 텍스트·프레임·이미지·서식 등을 편집한 뒤 IDML·PDF·PNG로 내보낼 수 있습니다.
+이는 자체 엔진으로 IDML 문서를 편집하는 기능이며 Adobe InDesign 앱을 직접 제어하는 기능은 아닙니다.
+`.indd`·`.indt` 가져오기도 제공하지만 `.indd`로 저장하지는 않습니다. 실제 문서의 왕복 서식 보존은 별도 검토가 필요합니다.
+LLM 호출, 사진·캡션·기사 관계 확정, 편집 후 자동 검증을 연결한 전체 자동 편집 파이프라인은 아직 없습니다.
 Markdown만으로 이미지 관계와 편집 결과의 정확성을 보장할 수는 없습니다.
 
 ## 1. 실행 위치와 준비 사항
@@ -22,7 +26,7 @@ Markdown만으로 이미지 관계와 편집 결과의 정확성을 보장할 �
 |---|---|
 | Rust 1.95 이상과 Cargo | IDML 렌더러 빌드·실행 |
 | Python 3.11 이상 | 라이브러리와 최종 Markdown 생성. 추가 Python 패키지는 필요 없음 |
-| `.idml` 파일 | 원본 지면 입력. `.indd`만 있다면 InDesign에서 IDML로 내보내야 함 |
+| `.idml` 파일 | 분석 파이프라인의 원본 지면 입력. CLI는 `.indd` 가져오기도 제공하지만 실제 문서 보존 여부는 검토 필요 |
 | `Links` 폴더와 이미지 | 사진·광고가 포함된 렌더링과 시각적 검토 |
 | 원본 폰트 또는 설치된 대체 폰트 | 글자 표시·줄바꿈·넘침 계산 |
 
@@ -70,6 +74,36 @@ python -X utf8 scripts\build_editing_context.py --library ".\outputs\editorial-l
 - 기존 분석 JSON과 `latest.json`은 변경하지 않습니다.
 
 이미 분석을 마친 경우에는 두 번째 명령을 사용하면 됩니다.
+
+### CLI로 문서 편집하기
+
+별도 프로젝트에서 빌드할 필요 없이 저장소 루트에서 실행합니다.
+
+```cmd
+cargo build --release -p designcraft-cli
+cargo run --release -p designcraft-cli -- --help
+cargo run --release -p designcraft-cli -- commands
+cargo run --release -p designcraft-cli -- describe story.setText
+```
+
+실행 파일은 `./target/release/designcraft-cli.exe`입니다. 여러 편집 명령은 UTF-8 스크립트에 적습니다.
+예를 들어 `./outputs/edit.dcs`에 아래 내용을 저장하면 첫 번째 스토리의 본문을 교체합니다.
+실제 문서에서는 먼저 `document.inspect` 결과를 확인해 대상 스토리 ID를 선택하세요.
+
+```text
+document.inspect
+story.setText {"story":"$0.stories.0.id","text":"교체할 기사 본문"}
+```
+
+```cmd
+cargo run --release -p designcraft-cli -- script ".\outputs\edit.dcs" --in ".\corpus\input.idml" --export ".\outputs\edited.idml" --export ".\outputs\edited.pdf" --export ".\outputs\edited.png"
+```
+
+- **입력:** 편집할 IDML, UTF-8 명령 스크립트, 연결된 이미지와 폰트.
+- **결과:** 편집된 IDML과 PDF·PNG. 명령별 결과는 표준 출력의 JSON으로 반환됩니다.
+- `--save`는 DesignCraft 고유 문서 저장용입니다. IDML 저장은 `--export "...idml"`을 사용합니다.
+- `mcp` 서브명령은 AI 도구가 같은 편집 엔진을 호출하는 MCP 서버를 제공합니다.
+- `app`·`--connect`는 별도로 실행 중인 DesignCraft 데스크톱 앱에 연결하는 기능입니다. 이 저장소는 데스크톱 앱을 포함하지 않습니다.
 
 ## 3. 입력 폴더 구성
 
@@ -316,6 +350,8 @@ PNG 폴더는 자동 생성되지만 JSON·PDF를 저장할 상위 폴더는 준
 심볼릭 링크를 해석한 뒤에도 IDML 폴더 밖에 있는 에셋은 읽지 않습니다.
 
 원본 폰트가 없으면 설치된 한글 대체 폰트를 찾습니다.
+자동 선택은 Apple SD Gothic Neo, Malgun Gothic, Noto Sans CJK KR, Noto Sans KR,
+Source Han Sans K 순입니다.
 다음 예시는 **해당 서체가 실제로 설치된 경우에만** 사용합니다.
 
 ```cmd
@@ -342,7 +378,7 @@ python -X utf8 scripts\build_editorial_library.py --input ".\corpus\newspapers\�
 | 자료 | 필요한 이유 | 현재 상태 |
 |---|---|---|
 | 통합 Markdown | 반복 서식·변형·주의점 이해 | 자동 생성 |
-| 원본 IDML | 프레임·텍스트·스타일과 실제 문서 구조 수정 | 사용자가 제공. 현재 도구는 읽기·렌더링 지원 |
+| 원본 IDML | 프레임·텍스트·스타일과 실제 문서 구조 수정 | 사용자가 제공. `designcraft-cli`로 편집·내보내기 지원 |
 | `Links` 이미지 | 사진 내용 확인, 교체, 원본 품질 유지 | 사용자가 제공. 렌더러가 읽음 |
 | 원본 폰트 | 서식과 줄바꿈·텍스트 수용량 재현 | 외부 입력 |
 | 지면 PNG 또는 기준 PDF | 사진·본문·제목의 시각적 균형 확인 | 렌더 명령으로 생성하거나 원본 제공 |
@@ -435,6 +471,7 @@ python -X utf8 scripts\build_editorial_library.py --input ".\corpus\newspapers\�
 ```
 
 네이티브 폴더 분석은 하위 폴더를 읽지 않으며 최대 1,000개 IDML을 처리합니다.
+개별 입력 IDML과 연결 파일은 각각 최대 256MiB로 제한합니다.
 라이브러리는 최대 1,000개 입력 파일, 전체 1,000페이지·50,000요소·50,000서식 레코드를 처리합니다.
 일부 파일이 실패하면 계속 진행하고 실패 목록을 남기며 종료 코드는 0이 아닙니다.
 부모 페이지·앵커 요소·표 셀·주석 등 분석에서 제외되는 내용도 있습니다.
@@ -503,8 +540,6 @@ rustup target add wasm32-unknown-unknown
 
 ## 16. 문서와 라이선스
 
-- [문서 안내](docs/README.md)
-- [렌더러 사용법](docs/idml-render.md)
 - [단일 파일·폴더 분석과 JSON 스키마](docs/editorial-analysis.md)
 - [호수·면별 라이브러리와 통합 전달물](docs/editorial-library.md)
 - [알려진 한계](docs/gaps.md)

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "apps/idml-render", "xtask"]
+members = ["crates/*", "apps/idml-render", "cli", "xtask"]
 default-members = ["apps/idml-render"]
 
 [workspace.package]
@@ -58,6 +58,32 @@ zip = { version = "3", default-features = false, features = ["deflate"] }
 craft-atomic = { version = "0.1.0", git = "https://github.com/storytold/craft-libs", rev = "92d392cff132eaf53e13afff77f38b5c11b73aa0" }
 
 craft-cms = { version = "0.1.0", git = "https://github.com/storytold/craft-libs", rev = "40525913633942f84b06d4837a8d90534a55d63f" }
+
+# Headless editing CLI and its engine dependencies.
+craft-mime = { version = "0.1.0", git = "https://github.com/storytold/craft-libs", rev = "f0f4758c01581d79577b9bf5046c06f4e77b1f18" }
+craft-designcraft-format = { git = "https://github.com/storytold/craft-libs", rev = "b1b4602a71d19e09ad33f7752a10d6598cf39b2b", version = "=0.1.0" }
+craft-epub = { git = "https://github.com/storytold/craft-libs", rev = "ba24fe2435adb3c81ad6057faf36365fbba736cf", version = "=0.1.0" }
+craft-indd = { git = "https://github.com/storytold/craft-libs", rev = "47bf5650b0d503b97bfb5e841746c4957897d11f", version = "=0.1.0" }
+craft-xml-dtd = { package = "craft-xml", git = "https://github.com/storytold/craft-libs", rev = "a5ac3aa05cf3ec013961a85599ddd9e0b5c03813", version = "=0.1.0" }
+craft-rtf = { git = "https://github.com/storytold/craft-libs", rev = "bfea7d9800a9f14e496209f9df30e9ef45655701", version = "=0.1.0" }
+craft-xlsx = { git = "https://github.com/storytold/craft-libs", rev = "2b9a325f57624804ed423aded16695eddb815119", version = "=0.1.0" }
+craft-docx = { git = "https://github.com/storytold/craft-libs", rev = "7ad4765ee55496d0ccdb7659ad7a6375c7bbb484", version = "=0.1.0" }
+craft-wordmodel = { git = "https://github.com/storytold/craft-libs", rev = "7ad4765ee55496d0ccdb7659ad7a6375c7bbb484", version = "=0.1.0" }
+craft-csv = { git = "https://github.com/storytold/craft-libs", rev = "387c64892b30fdad491b263cc3d9eac660d88dcc", version = "=0.1.0" }
+craft-opc = { git = "https://github.com/storytold/craft-libs", rev = "8abfa9d0f14bafbfc3449fc552ffeafb9ca6a551", version = "=0.1.0" }
+craft-pptx = { git = "https://github.com/storytold/craft-libs", rev = "f6cab1980", version = "=0.1.0" }
+designcraft-epub = { path = "crates/epub" }
+designcraft-pptx = { path = "crates/pptx" }
+designcraft-textimport = { path = "crates/textimport" }
+designcraft-format = { path = "crates/format" }
+designcraft-tools = { path = "crates/tools" }
+designcraft-engine = { path = "crates/engine" }
+designcraft-mcp = { path = "crates/mcp" }
+caseless = "0.2"
+tempfile = "3"
+same-file = "1.0.6"
+craft-docpath = { version = "0.1.0", git = "https://github.com/storytold/craft-libs", rev = "92d392cff132eaf53e13afff77f38b5c11b73aa0" }
+craft-print = { version = "0.1.0", git = "https://github.com/storytold/craft-libs", rev = "92d392cff132eaf53e13afff77f38b5c11b73aa0" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

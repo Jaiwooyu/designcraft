@@ -46,8 +46,10 @@ fn check_layers() -> Result<(), String> {
 
 fn wasm() -> Result<(), String> {
     let crates = layers::from_metadata(&metadata()?)?;
+    // The command-line host and stdio/TCP MCP server are native entry points. Keep the
+    // document, format and editing engine layers (L0–L5) usable from a WASM host.
     let names: Vec<_> =
-        crates.iter().filter(|c| matches!(layers::classify(&c.name), Some(layers::Class::Layer(_)))).map(|c| c.name.as_str()).collect();
+        crates.iter().filter(|c| matches!(layers::classify(&c.name), Some(layers::Class::Layer(0..=5)))).map(|c| c.name.as_str()).collect();
     let mut args = vec!["check", "--target", "wasm32-unknown-unknown"];
     for name in &names {
         args.extend(["-p", name]);

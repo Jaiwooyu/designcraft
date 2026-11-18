@@ -4,6 +4,9 @@ Every non-code asset in this repository (fonts, images, example art, presets) is
 
 Bundled fonts, colour profiles and hyphenation data are required by the renderer. New fonts are optional build inputs from craft-fonts and are not added to this repository.
 
+The headless editor's sample artwork is generated in code (`crates/engine/src/sample.rs`)
+by DesignCraft contributors under MIT OR Apache-2.0; it adds no bundled image files.
+
 | Asset | Author | Source | Licence | Notes |
 |---|---|---|---|---|
 | `assets/app-icon/LICENSE.txt` | (licence text) | this project | — | Retained historical app icon licence |

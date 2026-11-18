@@ -9,7 +9,9 @@
 - Linux deployment, performance and real-document fidelity have not been measured yet.
 - The retained shared CI workflow has not yet been verified on the new fork. Local checks run
   with `cargo xtask ci`.
-- Direct IDML article editing and a render–review–edit loop are not implemented.
+- `designcraft-cli` provides command/script-based IDML editing and export through its own
+  headless engine. It does not automate Adobe InDesign or save INDD. A complete LLM-driven
+  render–review–edit loop is not implemented, and real-document editing fidelity is unmeasured.
 - Editorial analysis extracts source formats and bounded layout evidence. The Python pipeline
   adds story-based article units, source thread order, photo/caption/article candidates,
   AABB overlap/wrap observations and missing/overset state. Semantic ownership, cross-story

@@ -3,6 +3,12 @@
 Current focus: a lightweight headless IDML-to-PNG/PDF renderer for an agent-assisted newspaper
 layout workflow. The source is derived from DesignCraft. See [known gaps](docs/gaps.md).
 
+- 2026-11-18: integrated the supplied DesignCraft command-line editor into `cli/` as a root
+  workspace member. It shares the existing rendering/analysis libraries and root lock file;
+  editing engine, tools, MCP and interchange dependencies live once under `crates/`.
+  Layer guide locks survive editing and IDML round trips. Desktop/web applications and
+  their separate workspace are excluded from the retained product.
+
 - 2026-11-15: removed the unused desktop contributor data and obsolete review and test-runner settings.
 - 2026-11-15: replaced the desktop-focused workspace with the rendering application and its
   document, typography, image, IDML and PDF dependencies. Desktop, web, editing engine and
